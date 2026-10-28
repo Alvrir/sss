@@ -18,7 +18,7 @@ const prefix='match-roulette-'+(base||'root').replace(/[^a-zA-Z0-9]/g,'_')+'-';
 const cache=prefix+hash.digest('hex').slice(0,16);
 await writeFile(new URL('sw.js',root),`
 const CACHE=${JSON.stringify(cache)},PREFIX=${JSON.stringify(prefix)},ASSETS=${JSON.stringify(assets)},ROOT=${JSON.stringify(url(''))},SHELL=${JSON.stringify(url('index.html'))};
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith(PREFIX)&&key!==CACHE)await caches.delete(key);await self.clients.claim();})()));
 self.addEventListener('fetch',event=>{const target=new URL(event.request.url);if(event.request.method!=='GET'||target.origin!==self.location.origin||!target.pathname.startsWith(ROOT))return;event.respondWith((async()=>{const cache=await caches.open(CACHE);if(event.request.mode==='navigate')return (await cache.match(SHELL))||fetch(event.request);return (await cache.match(event.request))||fetch(event.request);})());});
 `);
