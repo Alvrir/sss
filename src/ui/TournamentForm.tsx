@@ -2,6 +2,7 @@ import React,{useState} from 'react';
 import {useStore} from '../data/store';
 import {defaultRules,ensure,uid,type Tournament} from '../domain/types';
 import {startSetup} from '../domain/tournamentSetup';
+import {createTeamList} from '../domain/teamLists';
 import {Button,Card,Field,Multi,Select,Sheet,Toggle,Txt} from './kit';
 export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;onCreated:(id:string)=>void;existing?:Tournament}){
  const {state,change,busy}=useStore();
@@ -11,16 +12,18 @@ export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;on
  const [format,setFormat]=useState(existing?.groups?'grupos':existing?.format??'liga');
  const [mode,setMode]=useState<'manual'|'ruleta'>('ruleta'),[rules,setRules]=useState({...defaultRules,...existing?.rules});
  const [perGroup,setPerGroup]=useState(String(existing?.groupQualifiers??2)),[list,setList]=useState(existing?.listId??'');
+ const [manualTeams,setManualTeams]=useState('');
  const canChangeList=!existing||(!existing.setup?.order.length&&!existing.setup?.pendingPlayer&&!state.matches.some(m=>m.tournamentId===existing.id&&m.status==='finalizado'));
  const update=(value:Partial<typeof rules>)=>setRules({...rules,...value});
  async function save(){const id=existing?.id??uid();const ok=await change(s=>{
   ensure(name.trim()&&game,'Completá nombre y videojuego.');
   ensure(/^\d{4}-\d{2}-\d{2}$/.test(date)&&Number.isFinite(Date.parse(date)),'Fecha inválida.');
-  if(existing){const target=s.tournaments.find(t=>t.id===id)!;Object.assign(target,{name:name.trim(),date:new Date(date).toISOString(),season});if(canChangeList)target.listId=list||undefined;if(target.groups&&!target.seeds){const q=Number(perGroup);const max=target.setup?.complete?Math.min(...target.groups.map(g=>g.players.filter(p=>!target.retired?.includes(p)).length)):Math.floor(target.players.length/2);ensure(Number.isInteger(q)&&q>=1&&q<=max,'Revisá los clasificados por grupo.');target.groupQualifiers=q;target.rules.qualifiers=q*2;}return;}
+  const selectedList=canChangeList&&list==='manual'?createTeamList(s,game,'Equipos de '+name.trim(),manualTeams):list;
+  if(existing){const target=s.tournaments.find(t=>t.id===id)!;Object.assign(target,{name:name.trim(),date:new Date(date).toISOString(),season});if(canChangeList)target.listId=selectedList||undefined;if(target.groups&&!target.seeds){const q=Number(perGroup);const max=target.setup?.complete?Math.min(...target.groups.map(g=>g.players.filter(p=>!target.retired?.includes(p)).length)):Math.floor(target.players.length/2);ensure(Number.isInteger(q)&&q>=1&&q<=max,'Revisá los clasificados por grupo.');target.groupQualifiers=q;target.rules.qualifiers=q*2;}return;}
   ensure(players.length>=(format==='grupos'?4:2),'Elegí al menos dos jugadores, o cuatro para los dos grupos.');
   const q=format==='grupos'?Number(perGroup):Math.min(rules.qualifiers,players.length);
   if(format==='grupos')ensure(Number.isInteger(q)&&q>=1&&q<=Math.floor(players.length/2),'Revisá los clasificados por grupo.');
-  const t:Tournament={id,name:name.trim(),gameId:game,date:new Date(date).toISOString(),season,players:[...players],format:format==='grupos'?'mixto':format as Tournament['format'],manual:false,rules:{...rules,qualifiers:format==='grupos'?q*2:q},listId:list,assignment:'fijo',fixedTeams:{},status:'activo'};
+  const t:Tournament={id,name:name.trim(),gameId:game,date:new Date(date).toISOString(),season,players:[...players],format:format==='grupos'?'mixto':format as Tournament['format'],manual:false,rules:{...rules,qualifiers:format==='grupos'?q*2:q},listId:selectedList,assignment:'fijo',fixedTeams:{},status:'activo'};
   if(format==='grupos'){t.groups=[{id:'A',name:'Grupo A',players:[]},{id:'B',name:'Grupo B',players:[]}];t.groupQualifiers=q;}
   startSetup(s,t,mode);s.tournaments.push(t);
  });if(ok)onCreated(id);}
@@ -30,9 +33,10 @@ export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;on
     <Multi label="Jugadores" values={players} options={state.players.filter(p=>p.active)} onChange={ids=>{setPlayers(ids);update({qualifiers:Math.min(rules.qualifiers,Math.max(2,ids.length))});}}/>
     <Select label="Formato" value={format} onChange={v=>setFormat(v||'liga')} options={[{id:'liga',name:'Liga'},{id:'grupos',name:'Dos grupos + eliminatorias'},{id:'mixto',name:'Liga + eliminatorias'},{id:'copa',name:'Eliminación directa'}]}/>
     <Select label="Organizar jugadores y equipos" value={mode} onChange={v=>setMode(v==='manual'?'manual':'ruleta')} options={[{id:'ruleta',name:'Ruleta, paso a paso'},{id:'manual',name:'Elección manual'}]}/></>}
-   {canChangeList&&<Select label="Lista de equipos" value={list} onChange={setList} options={state.lists.filter(l=>l.gameId===game)}/>}
+   {canChangeList&&<Select label="Lista de equipos" value={list} onChange={setList} options={[...state.lists.filter(l=>l.gameId===game),{id:'manual',name:'Manual'}]}/>}
+   <>{canChangeList&&list==='manual'&&<Field label="Equipos separados por ;" value={manualTeams} onChange={setManualTeams}/>}</>
    <Txt muted>Un equipo diferente por jugador, fijo durante todo el torneo. La lista debe tener suficientes equipos activos.</Txt>
-   {!state.lists.some(l=>l.gameId===game)&&<Txt>Primero creá una lista desde «Equipos y listas».</Txt>}
+   {list!=='manual'&&!state.lists.some(l=>l.gameId===game)&&<Txt>Primero creá una lista desde «Equipos y listas».</Txt>}
   </Card>
   {existing?.groups&&!existing.seeds&&<Card><Field label="Clasifican por grupo" value={perGroup} onChange={setPerGroup} number/></Card>}
   {!existing&&<Card><Txt>Reglas</Txt>
