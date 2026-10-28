@@ -1,0 +1,6 @@
+import React,{useState} from 'react';
+import {router} from 'expo-router';
+import {useStore} from '../../src/data/store';
+import {Button,Card,Screen,Txt} from '../../src/ui/kit';
+import {TournamentForm} from '../../src/ui/TournamentForm';
+export default function Tournaments(){const {state}=useStore();const [open,setOpen]=useState(false);return <Screen title="La copa se juega." subtitle="Ligas, eliminatorias y noches que quedan en la historia."><Button title="+ Crear torneo" onPress={()=>setOpen(true)}/>{!state.tournaments.length&&<Card><Txt>Tu primera competición empieza acá.</Txt><Txt muted>Elegí participantes, formato y reglas. También podés cargar un torneo que ya empezó.</Txt></Card>}{[...state.tournaments].reverse().map(t=><Card key={t.id}><Txt muted>{t.format.toUpperCase()} · {t.status.toUpperCase()} · {t.date.slice(0,10)}</Txt><Txt>{t.name}</Txt><Txt muted>{state.games.find(g=>g.id===t.gameId)?.name} · {t.players.length} participantes</Txt>{t.champion&&<Txt>♜ {state.players.find(p=>p.id===t.champion)?.name}</Txt>}<Button title="Abrir torneo →" secondary onPress={()=>router.push({pathname:'/torneo/[id]',params:{id:t.id}})}/></Card>)}{open&&<TournamentForm onClose={()=>setOpen(false)} onCreated={id=>{setOpen(false);router.push({pathname:'/torneo/[id]',params:{id}});}}/>}</Screen>;}

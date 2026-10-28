@@ -1,0 +1,14 @@
+node_modules/
+.expo/
+android/
+ios/
+dist/
+*.jks
+*.keystore
+dist-web/
+.node_modules*/
+*.log
+.env
+.env.*
+!.env.example
+dist-pages/

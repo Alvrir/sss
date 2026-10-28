@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Match Roulette",
+    "slug": "match-roulette",
+    "version": "0.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "matchroulette",
+    "android": {
+      "package": "com.matchroulette.app",
+      "versionCode": 2,
+      "permissions": [],
+      "allowBackup": false
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Match Roulette"
+    }
+  }
+}

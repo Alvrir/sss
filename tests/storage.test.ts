@@ -1,0 +1,28 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {createRepository} from '../src/data/repository.ts';
+import {makeMatch} from '../src/domain/engine.ts';
+import {initialState} from '../src/domain/types.ts';
+import {defaultRules,type Tournament} from '../src/domain/types.ts';
+import {startSetup,selectSetupPlayer,assignSetupTeam,finishSetup} from '../src/domain/tournamentSetup.ts';
+function harness(){const sql=new DatabaseSync(':memory:');const adapter={execAsync:async(q:string)=>{sql.exec(q);},getFirstAsync:async(q:string,...args:any[])=>sql.prepare(q).get(...args),getAllAsync:async(q:string,...args:any[])=>sql.prepare(q).all(...args),runAsync:async(q:string,...args:any[])=>sql.prepare(q).run(...args),withExclusiveTransactionAsync:async(fn:(tx:unknown)=>Promise<void>)=>{sql.exec('BEGIN IMMEDIATE');try{await fn(adapter);sql.exec('COMMIT');}catch(e){sql.exec('ROLLBACK');throw e;}}};return {sql,repo:createRepository(adapter as never)};}
+test('SQLite: retoma un sorteo entre jugador y equipo y conserva grupos y fechas',async()=>{
+ const {sql,repo}=harness();await repo.initialize();const s=await repo.loadState();
+ s.teams=s.players.map((p,i)=>({id:`team-${i}`,name:p.name,kind:'club',gameId:'pes6'}));
+ s.lists=[{id:'list',name:'Lista',gameId:'pes6',description:'',entries:s.teams.map(t=>({teamId:t.id,active:true}))}];
+ const t:Tournament={id:'draw',name:'Grupos',gameId:'pes6',date:'2026-10-27T00:00:00Z',season:'2026',players:s.players.map(p=>p.id),format:'mixto',rules:{...defaultRules},assignment:'fijo',fixedTeams:{},manual:false,status:'activo',listId:'list',groups:[{id:'A',name:'Grupo A',players:[]},{id:'B',name:'Grupo B',players:[]}],groupQualifiers:2};
+ s.tournaments.push(t);startSetup(s,t,'ruleta');selectSetupPlayer(t,t.players[0]!);await repo.persist(s);
+ const restored=await repo.loadState(),target=restored.tournaments[0]!;
+ assert.equal(target.setup!.pendingPlayer,t.players[0]);assignSetupTeam(restored,target,'team-0');
+ for(let i=1;i<target.players.length;i++){selectSetupPlayer(target,target.players[i]!);assignSetupTeam(restored,target,`team-${i}`);}
+ finishSetup(restored,target);await repo.persist(restored,s);
+ const final=await repo.loadState();assert.deepEqual(final,JSON.parse(JSON.stringify(restored)));assert.equal(final.matches.length,6);sql.close();
+});
+test('SQLite: primera apertura, persistencia y recarga con IDs permanentes',async()=>{const {sql,repo}=harness();await repo.initialize();const s=await repo.loadState();assert.equal(s.players.length,6);const next=structuredClone(s);next.players[0]!.name='Alva editado';next.matches.push(makeMatch('player-1','player-2','pes6',{status:'finalizado',score:{home:3,away:1,extraHome:0,extraAway:0}}));await repo.persist(next,s);const reloaded=await repo.loadState();assert.equal(reloaded.players[0]!.name,'Alva editado');assert.equal(reloaded.matches.length,1);assert.equal(reloaded.matches[0]!.home,'player-1');sql.close();});
+test('SQLite: editar resultado hace UPSERT sin duplicar',async()=>{const {sql,repo}=harness();await repo.initialize();const s=await repo.loadState();s.matches.push(makeMatch('player-1','player-2','pes6',{status:'finalizado',score:{home:1,away:0,extraHome:0,extraAway:0}}));await repo.persist(s);const next=structuredClone(s);next.matches[0]!.score!.home=4;await repo.persist(next,s);const row=sql.prepare('SELECT count(*) AS n FROM matches').get();assert.equal(row!.n,1);assert.equal((await repo.loadState()).matches[0]!.score!.home,4);sql.close();});
+test('SQLite: copia inválida no cambia datos existentes',async()=>{const {sql,repo}=harness();await repo.initialize();const before=await repo.loadState();const bad=structuredClone(before);bad.matches.push(makeMatch('ausente','player-2','pes6'));await assert.rejects(repo.persist(bad,before));assert.deepEqual(await repo.loadState(),before);sql.close();});
+test('SQLite: fallo durante escritura revierte transacción completa',async()=>{const {sql,repo}=harness();await repo.initialize();const before=await repo.loadState();sql.exec("CREATE TRIGGER fail_match BEFORE INSERT ON matches BEGIN SELECT RAISE(ABORT, 'fallo simulado'); END;");const next=structuredClone(before);next.players[0]!.name='No debe persistir';next.matches.push(makeMatch('player-1','player-2','pes6'));await assert.rejects(repo.persist(next,before));assert.deepEqual(await repo.loadState(),before);sql.close();});
+test('SQLite: restauración reemplaza tablas y mantiene integridad referencial',async()=>{const {sql,repo}=harness();await repo.initialize();const old=await repo.loadState();old.teams.push({id:'team-old',gameId:'pes6',name:'Manual',kind:'club'});old.matches.push(makeMatch('player-1','player-2','pes6',{homeTeam:'team-old'}));await repo.persist(old);const fresh=initialState();fresh.players[0]!.name='Restaurado';await repo.persist(fresh,old);assert.deepEqual(await repo.loadState(),fresh);assert.equal(sql.prepare('PRAGMA foreign_key_check').all().length,0);sql.close();});
+test('SQLite: las claves foráneas impiden borrar jugadores con historial',async()=>{const {sql,repo}=harness();await repo.initialize();const s=await repo.loadState();s.matches.push(makeMatch('player-1','player-2','pes6'));await repo.persist(s);assert.throws(()=>sql.prepare('DELETE FROM players WHERE id=?').run('player-1'),/FOREIGN KEY/);assert.ok(sql.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_match_home'").get());sql.close();});
+test('SQLite: una versión futura de la base nunca se sobreescribe',async()=>{const {sql,repo}=harness();sql.exec('PRAGMA user_version=99');await assert.rejects(repo.initialize(),/más nueva/);assert.equal(sql.prepare('PRAGMA user_version').get()!.user_version,99);sql.close();});
