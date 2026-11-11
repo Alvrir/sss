@@ -14,6 +14,7 @@ export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;on
  const [perGroup,setPerGroup]=useState(String(existing?.groupQualifiers??2)),[list,setList]=useState(existing?.listId??'');
  const [manualTeams,setManualTeams]=useState('');
  const canChangeList=!existing||(!existing.setup?.order.length&&!existing.setup?.pendingPlayer&&!state.matches.some(m=>m.tournamentId===existing.id&&m.status==='finalizado'));
+ const selectedTeamList=state.lists.find(item=>item.id===list&&item.gameId===game);
  const update=(value:Partial<typeof rules>)=>setRules({...rules,...value});
  async function addPlayer(){const name=playerName.trim();if(!name)return;const known=state.players.find(p=>p.name.toLocaleLowerCase()===name.toLocaleLowerCase());const playerId=known?.id??uid();const ok=await change(s=>{if(!known)s.players.push({id:playerId,name,alias:'',color:'#B8FF65',active:true,createdAt:new Date().toISOString()});});if(ok){setPlayers(ids=>ids.includes(playerId)?ids:[...ids,playerId]);setPlayerName('');}}
  async function save(){const id=existing?.id??uid();const ok=await change(s=>{
@@ -36,6 +37,7 @@ export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;on
     <Select label="Formato" value={format} onChange={v=>setFormat(v||'liga')} options={[{id:'liga',name:'Liga'},{id:'grupos',name:'Dos grupos + eliminatorias'},{id:'mixto',name:'Liga + eliminatorias'},{id:'copa',name:'Eliminación directa'}]}/>
     <Select label="Organizar jugadores y equipos" value={mode} onChange={v=>setMode(v==='manual'?'manual':'ruleta')} options={[{id:'ruleta',name:'Ruleta, paso a paso'},{id:'manual',name:'Elección manual'}]}/></>}
    {canChangeList&&<Select label="Lista de equipos" value={list} onChange={setList} options={[...state.lists.filter(l=>l.gameId===game),{id:'manual',name:'Manual'}]}/>}
+   {selectedTeamList&&<Txt muted>Equipos de esta lista: {selectedTeamList.entries.filter(entry=>entry.active).map(entry=>state.teams.find(team=>team.id===entry.teamId)?.name).filter(Boolean).join(' · ')}</Txt>}
    <>{canChangeList&&list==='manual'&&<Field label="Equipos separados por ;" value={manualTeams} onChange={setManualTeams}/>}</>
    <Txt muted>Un equipo diferente por jugador, fijo durante todo el torneo. La lista debe tener suficientes equipos activos.</Txt>
    {list!=='manual'&&!state.lists.some(l=>l.gameId===game)&&<Txt>Primero creá una lista desde «Equipos y listas».</Txt>}
