@@ -8,6 +8,7 @@ import {withdrawPlayer} from '../domain/tournamentSetup';
 import {useStore} from '../data/store';
 import {Button,Card,Txt,confirm,colors} from './kit';
 import {MatchCard} from './MatchEditor';
+import {exportText} from '../data/files';
 
 export function TournamentGroups({t,matches}:{t:Tournament;matches:Match[]}){
  const {state}=useStore();
@@ -22,8 +23,8 @@ export function TournamentGroups({t,matches}:{t:Tournament;matches:Match[]}){
  </Card>)}</>;
 }
 export function TournamentCalendar({t,matches,allMatches,limit}:{t:Tournament;matches:Match[];allMatches:Match[];limit:number}){
- const {state}=useStore();const name=(id:string)=>state.players.find(p=>p.id===id)?.name??id;
- return <>{calendarSections(matches).slice(0,limit).map(section=><View key={section.key} style={{gap:14}}>
+ const {state}=useStore();const name=(id:string)=>state.players.find(p=>p.id===id)?.name??id;const scheduled=allMatches.filter(m=>m.status!=='cancelado');const finished=scheduled.filter(m=>m.status==='finalizado');const next=scheduled.filter(m=>m.status==='pendiente').sort((a,b)=>a.round-b.round||a.order-b.order)[0];const summary=[t.name,`${finished.length}/${scheduled.length} partidos jugados`,next?`Próximo: ${name(next.home)} vs ${name(next.away)} · Fecha ${next.round}`:'No quedan partidos pendientes','',...finished.slice(-8).reverse().map(m=>`${name(m.home)} ${m.score?.home}-${m.score?.away} ${name(m.away)}`)].join('\n');
+ return <><Card><Txt>Progreso: {finished.length}/{scheduled.length} partidos</Txt><Txt muted>{next?`Siguiente: ${name(next.home)} vs ${name(next.away)} · Fecha ${next.round}`:'Torneo sin partidos pendientes.'}</Txt><Button title="Compartir resumen" secondary onPress={()=>void exportText(`${t.name.replace(/[^a-z0-9]+/gi,'-').toLowerCase()}-resumen.txt`,summary,'text/plain')}/></Card>{calendarSections(matches).slice(0,limit).map(section=><View key={section.key} style={{gap:14}}>
   <Txt>{section.phase==='liga'?`Fecha ${section.round}`:section.phase==='tercero'?'Tercer puesto':`Copa · Ronda ${section.round}`}</Txt>
   {(section.phase==='liga'&&t.groups?t.groups:[{id:'all',name:'',players:activePlayers(t)}]).map(g=>{
    const games=section.matches.filter(m=>g.id==='all'||g.players.includes(m.home)&&g.players.includes(m.away));

@@ -8,13 +8,14 @@ export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;on
  const {state,change,busy}=useStore();
  const [name,setName]=useState(existing?.name??''),[game,setGame]=useState(existing?.gameId??state.games[0]?.id??'');
  const [date,setDate]=useState(existing?.date.slice(0,10)??new Date().toISOString().slice(0,10)),[season,setSeason]=useState(existing?.season??String(new Date().getFullYear()));
- const [players,setPlayers]=useState(existing?.players??state.players.filter(p=>p.active).map(p=>p.id));
+ const [players,setPlayers]=useState(existing?.players??state.players.filter(p=>p.active).map(p=>p.id)),[playerName,setPlayerName]=useState('');
  const [format,setFormat]=useState(existing?.groups?'grupos':existing?.format??'liga');
  const [mode,setMode]=useState<'manual'|'ruleta'>('ruleta'),[rules,setRules]=useState({...defaultRules,...existing?.rules});
  const [perGroup,setPerGroup]=useState(String(existing?.groupQualifiers??2)),[list,setList]=useState(existing?.listId??'');
  const [manualTeams,setManualTeams]=useState('');
  const canChangeList=!existing||(!existing.setup?.order.length&&!existing.setup?.pendingPlayer&&!state.matches.some(m=>m.tournamentId===existing.id&&m.status==='finalizado'));
  const update=(value:Partial<typeof rules>)=>setRules({...rules,...value});
+ async function addPlayer(){const name=playerName.trim();if(!name)return;const known=state.players.find(p=>p.name.toLocaleLowerCase()===name.toLocaleLowerCase());const playerId=known?.id??uid();const ok=await change(s=>{if(!known)s.players.push({id:playerId,name,alias:'',color:'#B8FF65',active:true,createdAt:new Date().toISOString()});});if(ok){setPlayers(ids=>ids.includes(playerId)?ids:[...ids,playerId]);setPlayerName('');}}
  async function save(){const id=existing?.id??uid();const ok=await change(s=>{
   ensure(name.trim()&&game,'Completá nombre y videojuego.');
   ensure(/^\d{4}-\d{2}-\d{2}$/.test(date)&&Number.isFinite(Date.parse(date)),'Fecha inválida.');
@@ -31,6 +32,7 @@ export function TournamentForm({onClose,onCreated,existing}:{onClose:()=>void;on
   <Card><Field label="Nombre" value={name} onChange={setName}/><Field label="Fecha de inicio (AAAA-MM-DD)" value={date} onChange={setDate}/><Field label="Temporada" value={season} onChange={setSeason}/>
    {!existing&&<><Select label="Videojuego" value={game} options={state.games} onChange={id=>{setGame(id);setList('');}}/>
     <Multi label="Jugadores" values={players} options={state.players.filter(p=>p.active)} onChange={ids=>{setPlayers(ids);update({qualifiers:Math.min(rules.qualifiers,Math.max(2,ids.length))});}}/>
+    <Field label="Agregar jugador al torneo" value={playerName} onChange={setPlayerName} placeholder="Escribí un nombre"/><Button title="Agregar jugador" secondary onPress={()=>void addPlayer()}/>
     <Select label="Formato" value={format} onChange={v=>setFormat(v||'liga')} options={[{id:'liga',name:'Liga'},{id:'grupos',name:'Dos grupos + eliminatorias'},{id:'mixto',name:'Liga + eliminatorias'},{id:'copa',name:'Eliminación directa'}]}/>
     <Select label="Organizar jugadores y equipos" value={mode} onChange={v=>setMode(v==='manual'?'manual':'ruleta')} options={[{id:'ruleta',name:'Ruleta, paso a paso'},{id:'manual',name:'Elección manual'}]}/></>}
    {canChangeList&&<Select label="Lista de equipos" value={list} onChange={setList} options={[...state.lists.filter(l=>l.gameId===game),{id:'manual',name:'Manual'}]}/>}
